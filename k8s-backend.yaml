@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: survey-backend
+  namespace: survey-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: survey-backend
+  template:
+    metadata:
+      labels:
+        app: survey-backend
+    spec:
+      containers:
+        - name: survey-backend
+          image: dgarapati03/survey-backend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: survey-backend-secret
+                  key: DB_USER
+            - name: DB_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: survey-backend-secret
+                  key: DB_PASS
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: survey-backend-secret
+                  key: DB_HOST
+            - name: DB_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: survey-backend-secret
+                  key: DB_PORT
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: survey-backend-secret
+                  key: DB_NAME
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: survey-backend-secret
+                  key: DATABASE_URL
+            - name: ALLOWED_ORIGINS
+              valueFrom:
+                secretKeyRef:
+                  name: survey-backend-secret
+                  key: ALLOWED_ORIGINS
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: survey-backend
+  namespace: survey-app
+spec:
+  selector:
+    app: survey-backend
+  ports:
+    - port: 8000
+      targetPort: 8000
+  type: ClusterIP

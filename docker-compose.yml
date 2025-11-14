@@ -1,0 +1,27 @@
+name: survey-app
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: survey-backend
+    restart: unless-stopped
+    environment:
+      # You already have this user/pass in RDS; keep using the full URL:
+      DATABASE_URL: "mysql+pymysql://survey:surveypass@surveydb.cxic486y49se.us-west-2.rds.amazonaws.com:3306/surveydb"
+      ALLOWED_ORIGINS: "http://localhost:8001"
+    expose:
+      - "8000"   # internal only
+
+  frontend:
+    build:
+      context: ./frontend-react
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE: "/api"
+    container_name: survey-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "8001:80"   # host:container
