@@ -80,7 +80,7 @@ pipeline {
       }
     }
 
-    stage('Deploy to Kubernetes (3 replicas)') {
+        stage('Deploy to Kubernetes (3 replicas)') {
       steps {
         sh '''
           set -eu
@@ -95,6 +95,9 @@ pipeline {
           echo "Force-deleting existing frontend pods (if any) to avoid stuck old replicas..."
           kubectl -n ${NAMESPACE} delete pods -l app=${DEPLOY} --force --grace-period=0 || true
 
+          echo "Sleeping 10s to let the old pods clear..."
+          sleep 10
+
           echo "Updating deployment image to: ${IMAGE}:${TAG}"
           kubectl -n ${NAMESPACE} set image deploy/${DEPLOY} ${DEPLOY}=${IMAGE}:${TAG} \
             || kubectl -n ${NAMESPACE} set image deploy/${DEPLOY} web=${IMAGE}:${TAG}
@@ -102,9 +105,9 @@ pipeline {
           echo "Scaling deployment to 3 replicas..."
           kubectl -n ${NAMESPACE} scale deploy/${DEPLOY} --replicas=3 || true
 
-          echo "Waiting for rollout (non-fatal if it times out)..."
-          if ! kubectl -n ${NAMESPACE} rollout status deploy/${DEPLOY} --timeout=180s; then
-            echo "WARNING: rollout did not finish in time. Check pods manually with:"
+          echo "Waiting for rollout (NON-FATAL if it times out)..."
+          if ! kubectl -n ${NAMESPACE} rollout status deploy/${DEPLOY} --timeout=60s; then
+            echo "WARNING: rollout did not finish in 60s. Check pods manually with:"
             echo "  kubectl -n ${NAMESPACE} get pods -o wide"
           fi
 
