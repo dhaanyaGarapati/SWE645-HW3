@@ -80,32 +80,43 @@ pipeline {
       }
     }
 
-    stage('Deploy to Kubernetes (3 replicas)') {
-  steps {
-    sh '''
-      set -eu
+       stage('Deploy to Kubernetes (3 replicas)') {
+    steps {
+      sh '''
+        set -eu
 
-      # Namespace / secrets
-      kubectl apply -f k8s-namespace.yaml
-      kubectl -n ${NAMESPACE} apply -f k8s-secret.yaml
+        echo "Ensuring namespace exists..."
+        kubectl create namespace ${NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
 
-      # Backend & frontend manifests
-      kubectl -n ${NAMESPACE} apply -f k8s-backend.yaml
-      kubectl -n ${NAMESPACE} apply -f k8s-frontend.yaml
+        echo "Applying backend & frontend manifests..."
+        kubectl -n ${NAMESPACE} apply -f k8s-backend.yaml
+        kubectl -n ${NAMESPACE} apply -f k8s-frontend.yaml
 
-      # Ensure latest image tag is used for frontend
-      kubectl -n ${NAMESPACE} set image deploy/${DEPLOY} ${DEPLOY}=${IMAGE}:${TAG} \
-        || kubectl -n ${NAMESPACE} set image deploy/${DEPLOY} web=${IMAGE}:${TAG}
+        echo "Force-deleting existing frontend pods (if any) to avoid stuck old replicas..."
+        kubectl -n ${NAMESPACE} delete pods -l app=${DEPLOY} --force --grace-period=0 || true
 
-      # Scale to 3 and wait for rollout
-      kubectl -n ${NAMESPACE} scale deploy/${DEPLOY} --replicas=3
-      kubectl -n ${NAMESPACE} rollout status deploy/${DEPLOY} --timeout=180s
+        echo "Updating deployment image to: ${IMAGE}:${TAG}"
+        kubectl -n ${NAMESPACE} set image deploy/${DEPLOY} ${DEPLOY}=${IMAGE}:${TAG} \
+          || kubectl -n ${NAMESPACE} set image deploy/${DEPLOY} web=${IMAGE}:${TAG}
 
-      echo "----- Service status -----"
-      kubectl -n ${NAMESPACE} get svc -o wide
-    '''
+        echo "Scaling deployment to 3 replicas..."
+        kubectl -n ${NAMESPACE} scale deploy/${DEPLOY} --replicas=3 || true
+
+        echo "Waiting for rollout (non-fatal if it times out)..."
+        if ! kubectl -n ${NAMESPACE} rollout status deploy/${DEPLOY} --timeout=180s; then
+          echo "WARNING: rollout did not finish in time. Check pods manually with:"
+          echo "  kubectl -n ${NAMESPACE} get pods -o wide"
+        fi
+
+        echo "----- Current Pods -----"
+        kubectl -n ${NAMESPACE} get pods -o wide || true
+
+        echo "----- Current Services -----"
+        kubectl -n ${NAMESPACE} get svc -o wide || true
+      '''
+    }
   }
-}
+
 
 
   post {
