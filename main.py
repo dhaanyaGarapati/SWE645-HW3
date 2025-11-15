@@ -1,15 +1,16 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .database import init_db
-from .routers import surveys
+# NOTE: no leading dots:
+from database import init_db
+from routers import surveys
 
 app = FastAPI(title="Survey API")
 
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8001","http://localhost:5173"],
+    allow_origins=["http://localhost:8001", "http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -23,5 +24,5 @@ def on_startup():
 def health():
     return {"ok": True}
 
-# Router lives at /surveys (frontend will call /api/surveys, nginx strips /api)
+# Router lives at /surveys
 app.include_router(surveys.router)
