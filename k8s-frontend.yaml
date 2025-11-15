@@ -4,7 +4,7 @@ metadata:
   name: survey-frontend
   namespace: survey-app
 spec:
-  replicas: 3                         # optional: match what Jenkins scales to
+  replicas: 3                         
   selector:
     matchLabels:
       app: survey-frontend
@@ -18,7 +18,7 @@ spec:
           image: dgarapati03/survey-frontend:latest
           imagePullPolicy: IfNotPresent
           ports:
-            - containerPort: 8000     
+            - containerPort: 8000    
           env:
             - name: VITE_API_BASE
               value: "http://survey-backend.survey-app.svc.cluster.local:8000"
@@ -33,5 +33,5 @@ spec:
     app: survey-frontend
   ports:
     - port: 80
-      targetPort: 8000               
+      targetPort: 8000        
   type: LoadBalancer
