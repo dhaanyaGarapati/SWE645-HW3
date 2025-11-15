@@ -1,27 +1,32 @@
-//Supraja Naraharisetty(G01507868)
-//Trinaya Kodavati (G01506073)
-//Lasya Reddy Mekala (G01473683)
-//Dhaanya S Garapati (G01512900)
+// SWE645 HW3 - CI/CD pipeline
+// Uses Docker Hub account: dgarapati03
 
 pipeline {
   agent any
-  triggers { githubPush() }  
+
+  // Trigger via GitHub webhooks (job config may also have Poll SCM)
+  triggers {
+    githubPush()
+  }
 
   environment {
     // GKE / GCP details for HW3
     PROJECT   = 'SWE645HW3'
-    LOCATION  = 'us-central1'      // this is a region
+    LOCATION  = 'us-central1'      // region
     LOC_FLAG  = '--region'         // use --region for regional clusters
     CLUSTER   = 'survey-cluster'
 
     // Kubernetes app details
     NAMESPACE = 'survey-app'
-    DEPLOY    = 'survey-frontend'  // deployment.metadata.name in your frontend YAML
+    DEPLOY    = 'survey-frontend'  // deployment.metadata.name in your YAML
+
+    // Docker Hub image (owner: dgarapati03)
     IMAGE     = 'dgarapati03/survey-frontend'
     TAG       = "${env.BUILD_NUMBER}"
   }
 
   stages {
+
     stage('Checkout') {
       steps {
         checkout scm
@@ -33,6 +38,7 @@ pipeline {
       steps {
         sh '''
           set -eu
+          echo "Building image: ${IMAGE}:${TAG}"
           docker build -t ${IMAGE}:${TAG} .
         '''
       }
@@ -40,9 +46,13 @@ pipeline {
 
     stage('Push to Docker Hub') {
       steps {
-        withCredentials([usernamePassword(credentialsId: 'dockerhub',
-                                          usernameVariable: 'U',
-                                          passwordVariable: 'TOKEN')]) {
+        withCredentials([
+          usernamePassword(
+            credentialsId: 'dockerhub',   // Jenkins credential for Docker Hub
+            usernameVariable: 'U',
+            passwordVariable: 'TOKEN'
+          )
+        ]) {
           sh '''
             set -eu
             echo "$TOKEN" | docker login -u "$U" --password-stdin
@@ -55,7 +65,9 @@ pipeline {
 
     stage('GCP auth & connect to GKE') {
       steps {
-        withCredentials([file(credentialsId: 'gcp-key', variable: 'GOOGLE_APPLICATION_CREDENTIALS')]) {
+        withCredentials([
+          file(credentialsId: 'gcp-key', variable: 'GOOGLE_APPLICATION_CREDENTIALS')
+        ]) {
           sh '''
             set -eu
             gcloud --version
@@ -72,16 +84,23 @@ pipeline {
       steps {
         sh '''
           set -eu
-          # Ensure namespace and service exist (idempotent)
+
+          # Ensure namespace exists (idempotent)
           kubectl create namespace ${NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
-          (kubectl -n ${NAMESPACE} apply -f k8s-service.yaml) || true
+
+          # Ensure service exists (adjust file name if needed)
+          if [ -f k8s-service.yaml ]; then
+            kubectl -n ${NAMESPACE} apply -f k8s-service.yaml
+          fi
 
           # Create or update deployment
           if kubectl -n ${NAMESPACE} get deploy/${DEPLOY} >/dev/null 2>&1; then
+            echo "Updating existing deployment ${DEPLOY}"
             kubectl -n ${NAMESPACE} set image deploy/${DEPLOY} ${DEPLOY}=${IMAGE}:${TAG} \
               || kubectl -n ${NAMESPACE} set image deploy/${DEPLOY} web=${IMAGE}:${TAG}
             kubectl -n ${NAMESPACE} scale deploy/${DEPLOY} --replicas=3
           else
+            echo "Creating new deployment ${DEPLOY}"
             kubectl -n ${NAMESPACE} apply -f k8s-deployment.yaml
             kubectl -n ${NAMESPACE} set image deploy/${DEPLOY} ${DEPLOY}=${IMAGE}:${TAG} \
               || kubectl -n ${NAMESPACE} set image deploy/${DEPLOY} web=${IMAGE}:${TAG}
@@ -101,7 +120,7 @@ pipeline {
       echo "Deployed ${IMAGE}:${TAG} to namespace ${NAMESPACE}"
     }
     failure {
-      echo "Build/Deploy failed — see the failing stage logs"
+      echo "Build/Deploy failed — check the failing stage logs above."
     }
   }
 }
