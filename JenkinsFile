@@ -11,7 +11,7 @@ pipeline {
 
   environment {
     // GKE / GCP details for HW3
-    PROJECT   = 'SWE645HW3'
+    PROJECT   = 'swe645hw3-478221'
     LOCATION  = 'us-central1'      // region
     LOC_FLAG  = '--region'         // use --region for regional clusters
     CLUSTER   = 'survey-cluster'
