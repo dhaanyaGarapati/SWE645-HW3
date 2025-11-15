@@ -81,39 +81,32 @@ pipeline {
     }
 
     stage('Deploy to Kubernetes (3 replicas)') {
-      steps {
-        sh '''
-          set -eu
+  steps {
+    sh '''
+      set -eu
 
-          # Ensure namespace exists (idempotent)
-          kubectl create namespace ${NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
+      # Namespace / secrets
+      kubectl apply -f k8s-namespace.yaml
+      kubectl -n ${NAMESPACE} apply -f k8s-secret.yaml
 
-          # Ensure service exists (adjust file name if needed)
-          if [ -f k8s-service.yaml ]; then
-            kubectl -n ${NAMESPACE} apply -f k8s-service.yaml
-          fi
+      # Backend & frontend manifests
+      kubectl -n ${NAMESPACE} apply -f k8s-backend.yaml
+      kubectl -n ${NAMESPACE} apply -f k8s-frontend.yaml
 
-          # Create or update deployment
-          if kubectl -n ${NAMESPACE} get deploy/${DEPLOY} >/dev/null 2>&1; then
-            echo "Updating existing deployment ${DEPLOY}"
-            kubectl -n ${NAMESPACE} set image deploy/${DEPLOY} ${DEPLOY}=${IMAGE}:${TAG} \
-              || kubectl -n ${NAMESPACE} set image deploy/${DEPLOY} web=${IMAGE}:${TAG}
-            kubectl -n ${NAMESPACE} scale deploy/${DEPLOY} --replicas=3
-          else
-            echo "Creating new deployment ${DEPLOY}"
-            kubectl -n ${NAMESPACE} apply -f k8s-deployment.yaml
-            kubectl -n ${NAMESPACE} set image deploy/${DEPLOY} ${DEPLOY}=${IMAGE}:${TAG} \
-              || kubectl -n ${NAMESPACE} set image deploy/${DEPLOY} web=${IMAGE}:${TAG}
-            kubectl -n ${NAMESPACE} scale deploy/${DEPLOY} --replicas=3
-          fi
+      # Ensure latest image tag is used for frontend
+      kubectl -n ${NAMESPACE} set image deploy/${DEPLOY} ${DEPLOY}=${IMAGE}:${TAG} \
+        || kubectl -n ${NAMESPACE} set image deploy/${DEPLOY} web=${IMAGE}:${TAG}
 
-          kubectl -n ${NAMESPACE} rollout status deploy/${DEPLOY} --timeout=180s
-          echo "----- Service status -----"
-          kubectl -n ${NAMESPACE} get svc -o wide
-        '''
-      }
-    }
+      # Scale to 3 and wait for rollout
+      kubectl -n ${NAMESPACE} scale deploy/${DEPLOY} --replicas=3
+      kubectl -n ${NAMESPACE} rollout status deploy/${DEPLOY} --timeout=180s
+
+      echo "----- Service status -----"
+      kubectl -n ${NAMESPACE} get svc -o wide
+    '''
   }
+}
+
 
   post {
     success {
