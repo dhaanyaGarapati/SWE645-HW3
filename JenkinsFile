@@ -80,44 +80,43 @@ pipeline {
       }
     }
 
-       stage('Deploy to Kubernetes (3 replicas)') {
-    steps {
-      sh '''
-        set -eu
+    stage('Deploy to Kubernetes (3 replicas)') {
+      steps {
+        sh '''
+          set -eu
 
-        echo "Ensuring namespace exists..."
-        kubectl create namespace ${NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
+          echo "Ensuring namespace exists..."
+          kubectl create namespace ${NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
 
-        echo "Applying backend & frontend manifests..."
-        kubectl -n ${NAMESPACE} apply -f k8s-backend.yaml
-        kubectl -n ${NAMESPACE} apply -f k8s-frontend.yaml
+          echo "Applying backend & frontend manifests..."
+          kubectl -n ${NAMESPACE} apply -f k8s-backend.yaml
+          kubectl -n ${NAMESPACE} apply -f k8s-frontend.yaml
 
-        echo "Force-deleting existing frontend pods (if any) to avoid stuck old replicas..."
-        kubectl -n ${NAMESPACE} delete pods -l app=${DEPLOY} --force --grace-period=0 || true
+          echo "Force-deleting existing frontend pods (if any) to avoid stuck old replicas..."
+          kubectl -n ${NAMESPACE} delete pods -l app=${DEPLOY} --force --grace-period=0 || true
 
-        echo "Updating deployment image to: ${IMAGE}:${TAG}"
-        kubectl -n ${NAMESPACE} set image deploy/${DEPLOY} ${DEPLOY}=${IMAGE}:${TAG} \
-          || kubectl -n ${NAMESPACE} set image deploy/${DEPLOY} web=${IMAGE}:${TAG}
+          echo "Updating deployment image to: ${IMAGE}:${TAG}"
+          kubectl -n ${NAMESPACE} set image deploy/${DEPLOY} ${DEPLOY}=${IMAGE}:${TAG} \
+            || kubectl -n ${NAMESPACE} set image deploy/${DEPLOY} web=${IMAGE}:${TAG}
 
-        echo "Scaling deployment to 3 replicas..."
-        kubectl -n ${NAMESPACE} scale deploy/${DEPLOY} --replicas=3 || true
+          echo "Scaling deployment to 3 replicas..."
+          kubectl -n ${NAMESPACE} scale deploy/${DEPLOY} --replicas=3 || true
 
-        echo "Waiting for rollout (non-fatal if it times out)..."
-        if ! kubectl -n ${NAMESPACE} rollout status deploy/${DEPLOY} --timeout=180s; then
-          echo "WARNING: rollout did not finish in time. Check pods manually with:"
-          echo "  kubectl -n ${NAMESPACE} get pods -o wide"
-        fi
+          echo "Waiting for rollout (non-fatal if it times out)..."
+          if ! kubectl -n ${NAMESPACE} rollout status deploy/${DEPLOY} --timeout=180s; then
+            echo "WARNING: rollout did not finish in time. Check pods manually with:"
+            echo "  kubectl -n ${NAMESPACE} get pods -o wide"
+          fi
 
-        echo "----- Current Pods -----"
-        kubectl -n ${NAMESPACE} get pods -o wide || true
+          echo "----- Current Pods -----"
+          kubectl -n ${NAMESPACE} get pods -o wide || true
 
-        echo "----- Current Services -----"
-        kubectl -n ${NAMESPACE} get svc -o wide || true
-      '''
+          echo "----- Current Services -----"
+          kubectl -n ${NAMESPACE} get svc -o wide || true
+        '''
+      }
     }
   }
-
-
 
   post {
     success {
