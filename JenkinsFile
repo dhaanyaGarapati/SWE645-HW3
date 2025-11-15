@@ -1,0 +1,143 @@
+// SWE645 HW3 – Jenkins pipeline
+// Supraja Naraharisetty(G01507868)
+// Trinaya Kodavati (G01506073)
+// Lasya Reddy Mekala (G01473683)
+// Dhaanya S Garapati (G01512900)
+
+pipeline {
+  agent any
+
+  // Build on every GitHub push
+  triggers { githubPush() }
+
+  environment {
+    // ===== GKE / GCP =====
+    PROJECT   = 'SWE645hw3'        // <-- change if HW3 uses a different project
+    LOCATION  = 'us-central1'    // zone or region for your cluster
+    LOC_FLAG  = '--zone'           // use '--region' if you’re using a regional cluster
+    CLUSTER   = 'survey-cluster'   // your existing cluster name
+
+    // ===== Kubernetes =====
+    NAMESPACE = 'survey-app'
+
+    BACKEND_DEPLOY  = 'survey-backend'
+    FRONTEND_DEPLOY = 'survey-frontend'
+
+    // ===== Docker Hub repos =====
+    BACKEND_IMAGE  = 'dgarapati03/survey-backend'
+    FRONTEND_IMAGE = 'dgarapati03/survey-frontend'
+
+    TAG = "${env.BUILD_NUMBER}"    // image tag = Jenkins build number
+  }
+
+  stages {
+
+    stage('Checkout') {
+      steps {
+        checkout scm
+        sh 'ls -la'
+      }
+    }
+
+    stage('Build backend image') {
+      steps {
+        sh '''
+          set -eu
+          cd backend
+          docker build -t ${BACKEND_IMAGE}:${TAG} .
+        '''
+      }
+    }
+
+    stage('Build frontend image') {
+      steps {
+        sh '''
+          set -eu
+          cd frontend-react
+          docker build -t ${FRONTEND_IMAGE}:${TAG} .
+        '''
+      }
+    }
+
+    stage('Push images to Docker Hub') {
+      steps {
+        withCredentials([usernamePassword(
+            credentialsId: 'dockerhub',   // Jenkins creds ID for Docker Hub
+            usernameVariable: 'U',
+            passwordVariable: 'TOKEN'
+        )]) {
+          sh '''
+            set -eu
+            echo "$TOKEN" | docker login -u "$U" --password-stdin
+
+            docker push ${BACKEND_IMAGE}:${TAG}
+            docker push ${FRONTEND_IMAGE}:${TAG}
+
+            docker logout
+          '''
+        }
+      }
+    }
+
+    stage('GCP auth & connect to GKE') {
+      steps {
+        withCredentials([file(
+          credentialsId: 'jenkins-gke-key',      // Jenkins file credential with your SA JSON
+          variable: 'GOOGLE_APPLICATION_CREDENTIALS'
+        )]) {
+          sh '''
+            set -eu
+            gcloud auth activate-service-account \
+              --key-file="$GOOGLE_APPLICATION_CREDENTIALS"
+
+            gcloud config set project ${PROJECT}
+
+            gcloud container clusters get-credentials ${CLUSTER} \
+              ${LOC_FLAG} ${LOCATION} --project ${PROJECT}
+
+            kubectl version --client=true
+          '''
+        }
+      }
+    }
+
+    stage('Apply manifests & update deployments') {
+      steps {
+        sh '''
+          set -eu
+
+          # 1) Namespace & secrets (idempotent)
+          kubectl apply -f k8s-namespace.yaml
+          kubectl -n ${NAMESPACE} apply -f k8s-secret.yaml
+
+          # 2) Backend & frontend manifests (create if missing, update if changed)
+          kubectl -n ${NAMESPACE} apply -f k8s-backend.yaml
+          kubectl -n ${NAMESPACE} apply -f k8s-frontend.yaml
+
+          # 3) Point deployments to freshly built images
+          kubectl -n ${NAMESPACE} set image deployment/${BACKEND_DEPLOY} \
+              ${BACKEND_DEPLOY}=${BACKEND_IMAGE}:${TAG}
+
+          kubectl -n ${NAMESPACE} set image deployment/${FRONTEND_DEPLOY} \
+              ${FRONTEND_DEPLOY}=${FRONTEND_IMAGE}:${TAG}
+
+          # 4) Wait for rollouts
+          kubectl -n ${NAMESPACE} rollout status deployment/${BACKEND_DEPLOY}  --timeout=180s
+          kubectl -n ${NAMESPACE} rollout status deployment/${FRONTEND_DEPLOY} --timeout=180s
+
+          echo "----- Current services -----"
+          kubectl -n ${NAMESPACE} get svc -o wide
+        '''
+      }
+    }
+  }
+
+  post {
+    success {
+      echo "✅ Deployed backend=${BACKEND_IMAGE}:${TAG}, frontend=${FRONTEND_IMAGE}:${TAG} to namespace ${NAMESPACE}"
+    }
+    failure {
+      echo "❌ Build/Deploy failed — check stage logs above."
+    }
+  }
+}
