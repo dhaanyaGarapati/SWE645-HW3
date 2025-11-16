@@ -4,7 +4,7 @@ metadata:
   name: survey-frontend
   namespace: survey-app
 spec:
-  replicas: 3                         
+  replicas: 1
   selector:
     matchLabels:
       app: survey-frontend
@@ -16,9 +16,9 @@ spec:
       containers:
         - name: survey-frontend
           image: dgarapati03/survey-frontend:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
-            - containerPort: 8000    
+            - containerPort: 80
           env:
             - name: VITE_API_BASE
               value: "http://survey-backend.survey-app.svc.cluster.local:8000"
@@ -33,5 +33,5 @@ spec:
     app: survey-frontend
   ports:
     - port: 80
-      targetPort: 8000        
+      targetPort: 80
   type: LoadBalancer
