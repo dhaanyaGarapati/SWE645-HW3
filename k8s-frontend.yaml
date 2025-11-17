@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: survey-frontend
-          image: dgarapati03/survey-frontend:latest
+          image: dgarapati03/survey-frontend:v1
           imagePullPolicy: Always
           ports:
             - containerPort: 80
