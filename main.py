@@ -7,7 +7,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-# NOTE: no leading dots:
+
 from database import init_db
 from routers import surveys
 
@@ -32,4 +32,5 @@ def health():
 
 
 app.include_router(surveys.router)
+
 
