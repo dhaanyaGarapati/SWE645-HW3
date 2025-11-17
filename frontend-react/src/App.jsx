@@ -1,3 +1,9 @@
+// Team Members:
+// Lasya Reddy Mekala (G01473683)
+// Supraja Naraharisetty(G01507868)
+// Trinaya Kodavati (G01506073)
+// Dhaanya S Garapati (G01512900)
+
 import { useEffect, useRef, useState } from "react";
 import { SurveyAPI } from "./api";
 import flatpickr from "flatpickr";
