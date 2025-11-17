@@ -86,39 +86,37 @@ pipeline {
     }
 
     stage('Deploy to Kubernetes (3 replicas)') {
-      steps {
-        sh '''
-          set -eu
+  steps {
+    sh '''
+      set -eu
 
-          echo "Ensuring namespace exists..."
-          kubectl create namespace ${NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
+      echo "Ensuring namespace exists..."
+      kubectl create namespace ${NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
 
-          echo "Applying backend & frontend manifests..."
-          kubectl -n ${NAMESPACE} apply -f k8s-backend.yaml
-          kubectl -n ${NAMESPACE} apply -f k8s-frontend.yaml
+      echo "Applying backend & frontend manifests..."
+      kubectl -n ${NAMESPACE} apply -f k8s-backend.yaml
+      kubectl -n ${NAMESPACE} apply -f k8s-frontend.yaml
 
-          echo "Updating deployment images to current build tag..."
-          # NOTE: replace "backend" and "web" with the actual container names
-          kubectl -n ${NAMESPACE} set image deploy/${BACKEND_DEPLOY} backend=${BACKEND_IMAGE}:${TAG}
-          kubectl -n ${NAMESPACE} set image deploy/${FRONTEND_DEPLOY} web=${FRONTEND_IMAGE}:${TAG}
+      echo "Updating deployment images to current build tag..."
+      kubectl -n ${NAMESPACE} set image deploy/${BACKEND_DEPLOY} "*=${BACKEND_IMAGE}:${TAG}"
+      kubectl -n ${NAMESPACE} set image deploy/${FRONTEND_DEPLOY} "*=${FRONTEND_IMAGE}:${TAG}"
 
-          echo "Scaling deployments to 3 replicas..."
-          kubectl -n ${NAMESPACE} scale deploy/${BACKEND_DEPLOY} --replicas=3 || true
-          kubectl -n ${NAMESPACE} scale deploy/${FRONTEND_DEPLOY} --replicas=3 || true
+      echo "Scaling deployments to 3 replicas..."
+      kubectl -n ${NAMESPACE} scale deploy/${BACKEND_DEPLOY} --replicas=3 || true
+      kubectl -n ${NAMESPACE} scale deploy/${FRONTEND_DEPLOY} --replicas=3 || true
 
-          echo "Waiting for rollout (non-fatal if timeout)..."
-          kubectl -n ${NAMESPACE} rollout status deploy/${BACKEND_DEPLOY} --timeout=60s || true
-          kubectl -n ${NAMESPACE} rollout status deploy/${FRONTEND_DEPLOY} --timeout=60s || true
+      echo "Waiting for rollout (non-fatal if timeout)..."
+      kubectl -n ${NAMESPACE} rollout status deploy/${BACKEND_DEPLOY} --timeout=60s || true
+      kubectl -n ${NAMESPACE} rollout status deploy/${FRONTEND_DEPLOY} --timeout=60s || true
 
-          echo "----- Pods -----"
-          kubectl -n ${NAMESPACE} get pods -o wide || true
+      echo "----- Pods -----"
+      kubectl -n ${NAMESPACE} get pods -o wide || true
 
-          echo "----- Services -----"
-          kubectl -n ${NAMESPACE} get svc -o wide || true
-        '''
-      }
-    }
+      echo "----- Services -----"
+      kubectl -n ${NAMESPACE} get svc -o wide || true
+    '''
   }
+}
 
   post {
     success {
