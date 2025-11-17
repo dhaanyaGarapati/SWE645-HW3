@@ -19,7 +19,7 @@ async function call(path, options = {}) {
     ...options,
   });
 
-  // Try to parse a useful error message
+  
   if (!res.ok) {
     let msg;
     const ct = res.headers.get("content-type") || "";
@@ -42,12 +42,12 @@ async function call(path, options = {}) {
 }
 
 export const SurveyAPI = {
-  // collection endpoints (note the trailing slash)
+  
   list:   () => call("/surveys/"),
   create: (data) =>
     call("/surveys/", { method: "POST", body: JSON.stringify(data) }),
 
-  // item endpoints
+ 
   get:    (id) =>
     call(`/surveys/${id}`),
   update: (id, data) =>
