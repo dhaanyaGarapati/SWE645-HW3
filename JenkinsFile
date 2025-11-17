@@ -1,6 +1,11 @@
 // SWE645 HW3 - CI/CD pipeline
 // Builds & pushes backend + frontend images and deploys to GKE
 
+// Lasya Reddy Mekala (G01473683)
+// Supraja Naraharisetty(G01507868)
+// Trinaya Kodavati (G01506073)
+// Dhaanya S Garapati (G01512900)
+
 pipeline {
   agent any
 
