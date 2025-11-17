@@ -1,3 +1,9 @@
+# Team Members:
+# Lasya Reddy Mekala (G01473683)
+# Supraja Naraharisetty (G01507868)
+# Trinaya Kodavati (G01506073)
+# Dhaanya S Garapati (G01512900)
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -7,7 +13,7 @@ from routers import surveys
 
 app = FastAPI(title="Survey API")
 
-# CORS
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:8001", "http://localhost:5173"],
@@ -24,5 +30,6 @@ def on_startup():
 def health():
     return {"ok": True}
 
-# Router lives at /surveys
+
 app.include_router(surveys.router)
+
