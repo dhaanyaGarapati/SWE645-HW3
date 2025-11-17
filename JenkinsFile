@@ -1,28 +1,29 @@
 // SWE645 HW3 - CI/CD pipeline
-// Uses Docker Hub account: dgarapati03
+// Builds & pushes backend + frontend images and deploys to GKE
 
 pipeline {
   agent any
 
-  // Trigger via GitHub webhooks (job config may also have Poll SCM)
   triggers {
     githubPush()
   }
 
   environment {
-    // GKE / GCP details for HW3
+    // GCP / GKE
     PROJECT   = 'swe645hw3-478221'
-    LOCATION  = 'us-central1'      // region
-    LOC_FLAG  = '--region'         // use --region for regional clusters
+    LOCATION  = 'us-central1'
+    LOC_FLAG  = '--region'
     CLUSTER   = 'survey-cluster'
 
-    // Kubernetes app details
-    NAMESPACE = 'survey-app'
-    DEPLOY    = 'survey-frontend'  // deployment.metadata.name in your YAML
+    // K8s
+    NAMESPACE       = 'survey-app'
+    BACKEND_DEPLOY  = 'survey-backend'   // deployment.metadata.name in k8s-backend.yaml
+    FRONTEND_DEPLOY = 'survey-frontend'  // deployment.metadata.name in k8s-frontend.yaml
 
-    // Docker Hub image (owner: dgarapati03)
-    IMAGE     = 'dgarapati03/survey-frontend'
-    TAG       = "${env.BUILD_NUMBER}"
+    // Docker Hub images
+    BACKEND_IMAGE   = 'dgarapati03/survey-backend'
+    FRONTEND_IMAGE  = 'dgarapati03/survey-frontend'
+    TAG             = "${env.BUILD_NUMBER}"
   }
 
   stages {
@@ -34,12 +35,15 @@ pipeline {
       }
     }
 
-    stage('Build Docker image') {
+    stage('Build Docker images') {
       steps {
         sh '''
           set -eu
-          echo "Building image: ${IMAGE}:${TAG}"
-          docker build -t ${IMAGE}:${TAG} .
+          echo "Building BACKEND image: ${BACKEND_IMAGE}:${TAG}"
+          docker build -t ${BACKEND_IMAGE}:${TAG} backend
+
+          echo "Building FRONTEND image: ${FRONTEND_IMAGE}:${TAG}"
+          docker build -t ${FRONTEND_IMAGE}:${TAG} frontend-react
         '''
       }
     }
@@ -48,7 +52,7 @@ pipeline {
       steps {
         withCredentials([
           usernamePassword(
-            credentialsId: 'dockerhub',   // Jenkins credential for Docker Hub
+            credentialsId: 'dockerhub',   // Jenkins cred for Docker Hub
             usernameVariable: 'U',
             passwordVariable: 'TOKEN'
           )
@@ -56,7 +60,10 @@ pipeline {
           sh '''
             set -eu
             echo "$TOKEN" | docker login -u "$U" --password-stdin
-            docker push ${IMAGE}:${TAG}
+
+            docker push ${BACKEND_IMAGE}:${TAG}
+            docker push ${FRONTEND_IMAGE}:${TAG}
+
             docker logout
           '''
         }
@@ -70,17 +77,15 @@ pipeline {
         ]) {
           sh '''
             set -eu
-            gcloud --version
             gcloud auth activate-service-account --key-file="$GOOGLE_APPLICATION_CREDENTIALS"
             gcloud config set project ${PROJECT}
             gcloud container clusters get-credentials ${CLUSTER} ${LOC_FLAG} ${LOCATION} --project ${PROJECT}
-            kubectl version --client=true
           '''
         }
       }
     }
 
-        stage('Deploy to Kubernetes (3 replicas)') {
+    stage('Deploy to Kubernetes (3 replicas)') {
       steps {
         sh '''
           set -eu
@@ -92,29 +97,23 @@ pipeline {
           kubectl -n ${NAMESPACE} apply -f k8s-backend.yaml
           kubectl -n ${NAMESPACE} apply -f k8s-frontend.yaml
 
-          echo "Force-deleting existing frontend pods (if any) to avoid stuck old replicas..."
-          kubectl -n ${NAMESPACE} delete pods -l app=${DEPLOY} --force --grace-period=0 || true
+          echo "Updating deployment images to current build tag..."
+          # NOTE: replace "backend" and "web" with the actual container names
+          kubectl -n ${NAMESPACE} set image deploy/${BACKEND_DEPLOY} backend=${BACKEND_IMAGE}:${TAG}
+          kubectl -n ${NAMESPACE} set image deploy/${FRONTEND_DEPLOY} web=${FRONTEND_IMAGE}:${TAG}
 
-          echo "Sleeping 10s to let the old pods clear..."
-          sleep 10
+          echo "Scaling deployments to 3 replicas..."
+          kubectl -n ${NAMESPACE} scale deploy/${BACKEND_DEPLOY} --replicas=3 || true
+          kubectl -n ${NAMESPACE} scale deploy/${FRONTEND_DEPLOY} --replicas=3 || true
 
-          echo "Updating deployment image to: ${IMAGE}:${TAG}"
-          kubectl -n ${NAMESPACE} set image deploy/${DEPLOY} ${DEPLOY}=${IMAGE}:${TAG} \
-            || kubectl -n ${NAMESPACE} set image deploy/${DEPLOY} web=${IMAGE}:${TAG}
+          echo "Waiting for rollout (non-fatal if timeout)..."
+          kubectl -n ${NAMESPACE} rollout status deploy/${BACKEND_DEPLOY} --timeout=60s || true
+          kubectl -n ${NAMESPACE} rollout status deploy/${FRONTEND_DEPLOY} --timeout=60s || true
 
-          echo "Scaling deployment to 3 replicas..."
-          kubectl -n ${NAMESPACE} scale deploy/${DEPLOY} --replicas=3 || true
-
-          echo "Waiting for rollout (NON-FATAL if it times out)..."
-          if ! kubectl -n ${NAMESPACE} rollout status deploy/${DEPLOY} --timeout=60s; then
-            echo "WARNING: rollout did not finish in 60s. Check pods manually with:"
-            echo "  kubectl -n ${NAMESPACE} get pods -o wide"
-          fi
-
-          echo "----- Current Pods -----"
+          echo "----- Pods -----"
           kubectl -n ${NAMESPACE} get pods -o wide || true
 
-          echo "----- Current Services -----"
+          echo "----- Services -----"
           kubectl -n ${NAMESPACE} get svc -o wide || true
         '''
       }
@@ -123,7 +122,7 @@ pipeline {
 
   post {
     success {
-      echo "Deployed ${IMAGE}:${TAG} to namespace ${NAMESPACE}"
+      echo "Deployed backend=${BACKEND_IMAGE}:${TAG}, frontend=${FRONTEND_IMAGE}:${TAG} to namespace ${NAMESPACE}"
     }
     failure {
       echo "Build/Deploy failed — check the failing stage logs above."
