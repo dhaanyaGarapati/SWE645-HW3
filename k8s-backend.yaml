@@ -15,8 +15,8 @@ spec:
     spec:
       containers:
         - name: survey-backend
-          image: dgarapati03/survey-backend:latest
-          imagePullPolicy: IfNotPresent
+          image: dgarapati03/survey-backend:v1
+          imagePullPolicy: Always
           ports:
             - containerPort: 8000
           env:
