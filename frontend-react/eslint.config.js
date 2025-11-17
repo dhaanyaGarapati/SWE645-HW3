@@ -1,3 +1,9 @@
+// Team Members:
+// Lasya Reddy Mekala (G01473683)
+// Supraja Naraharisetty(G01507868)
+// Trinaya Kodavati (G01506073)
+// Dhaanya S Garapati (G01512900)
+
 import js from '@eslint/js'
 import globals from 'globals'
 import reactHooks from 'eslint-plugin-react-hooks'
